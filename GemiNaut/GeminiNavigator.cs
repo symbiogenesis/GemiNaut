@@ -27,8 +27,7 @@ using Microsoft.VisualBasic;
 using Microsoft.Win32;
 using System;
 using System.IO;
-using System.IO.MemoryMappedFiles;
-using System.Windows.Controls;
+using TheArtOfDev.HtmlRenderer.WPF;
 using static GemiNaut.Views.MainWindow;
 
 namespace GemiNaut
@@ -36,17 +35,17 @@ namespace GemiNaut
     public class GeminiNavigator
     {
         private readonly MainWindow mMainWindow;
-        private readonly WebBrowser mWebBrowser;
 
-        public GeminiNavigator(MainWindow mainWindow, WebBrowser browserControl)
+        public GeminiNavigator(MainWindow mainWindow)
         {
             mMainWindow = mainWindow;
-            mWebBrowser = browserControl;
         }
 
-        public void NavigateGeminiScheme(string fullQuery, System.Windows.Navigation.NavigatingCancelEventArgs e, SiteIdentity siteIdentity, bool requireSecure = true)
+        public bool NavigateGeminiScheme(string fullQuery, Uri uri, SiteIdentity siteIdentity, bool requireSecure = true)
         {
-            var geminiUri = e.Uri.OriginalString;
+            bool navigated = true;
+
+            var geminiUri = uri.OriginalString;
 
             var sessionPath = Session.Instance.SessionPath;
             var appDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -74,7 +73,7 @@ namespace GemiNaut
 
             var secureFlag = requireSecure ? "" : " -i ";
 
-            if (e.Uri.Scheme == "gemini")
+            if (uri.Scheme == "gemini")
             {
                 //pass options to gemget for download
                 command = string.Format(
@@ -131,9 +130,9 @@ namespace GemiNaut
                 if (tryInsecure)
                 {
                     //give a warning and try again with insecure
-                    mMainWindow.ToastNotify("Note: " + securityError + " for: " + e.Uri.Authority, ToastMessageStyles.Warning);
-                    NavigateGeminiScheme(fullQuery, e, siteIdentity, false);
-                    return;
+                    mMainWindow.ToastNotify("Note: " + securityError + " for: " + uri.Authority, ToastMessageStyles.Warning);
+                    NavigateGeminiScheme(fullQuery, uri, siteIdentity, false);
+                    return true;
                 }
             }
 
@@ -146,9 +145,8 @@ namespace GemiNaut
                         fullQuery);
 
                 mMainWindow.ToastNotify(abandonMessage, ToastMessageStyles.Warning);
-                e.Cancel = true;
                 mMainWindow.ToggleContainerControlsForBrowser(true);
-                return;
+                return false;
             }
 
             if (File.Exists(rawFile))
@@ -166,8 +164,7 @@ namespace GemiNaut
                     {
                         mMainWindow.ToastNotify("Could not convert HTML to GMI: " + fullQuery, ToastMessageStyles.Error);
                         mMainWindow.ToggleContainerControlsForBrowser(true);
-                        e.Cancel = true;
-                        return;
+                        return false;
                     }
                 }
                 else if (geminiResponse.Meta.Contains("text/"))
@@ -179,8 +176,7 @@ namespace GemiNaut
                     {
                         mMainWindow.ToastNotify("Could not render text as GMI: " + fullQuery, ToastMessageStyles.Error);
                         mMainWindow.ToggleContainerControlsForBrowser(true);
-                        e.Cancel = true;
-                        return;
+                        return false;
                     }
                 }
                 else
@@ -195,7 +191,7 @@ namespace GemiNaut
 
                     if (geminiResponse.Meta.Contains("image/"))
                     {
-                        mMainWindow.ShowImage(fullQuery, binFile, e);
+                        mMainWindow.ShowImage(fullQuery, binFile);
                     }
                     else
                     {
@@ -221,10 +217,10 @@ namespace GemiNaut
                         }
 
                         mMainWindow.ToggleContainerControlsForBrowser(true);
-                        e.Cancel = true;
+                        return false;
                     }
 
-                    return;
+                    return true;
                 }
 
                 if (geminiResponse.Redirected)
@@ -247,13 +243,12 @@ namespace GemiNaut
 
                     var finalUri = new Uri(redirectUri);
 
-                    if (e.Uri.Scheme == "gemini" && finalUri.Scheme != "gemini")
+                    if (uri.Scheme == "gemini" && finalUri.Scheme != "gemini")
                     {
                         //cross-scheme redirect, not supported
                         mMainWindow.ToastNotify("Cross scheme redirect from Gemini not supported: " + redirectUri, ToastMessageStyles.Warning);
                         mMainWindow.ToggleContainerControlsForBrowser(true);
-                        e.Cancel = true;
-                        return;
+                        return false;
                     }
                     else
                     {
@@ -296,7 +291,7 @@ namespace GemiNaut
 
                 var userThemeBase = Path.Combine(userThemesFolder, settings.Theme);
 
-                mMainWindow.ShowUrl(geminiUri, gmiFile, htmlFile, userThemeBase, siteIdentity, e);
+                mMainWindow.ShowUrl(geminiUri, gmiFile, htmlFile, userThemeBase, siteIdentity);
             }
             else if (geminiResponse.Status == 10 || geminiResponse.Status == 11)
             {
@@ -304,11 +299,11 @@ namespace GemiNaut
 
                 mMainWindow.ToggleContainerControlsForBrowser(true);
 
-                NavigateGeminiWithInput(e, geminiResponse.Meta);
+                navigated = NavigateGeminiWithInput(uri, geminiResponse.Meta);
             }
             else if (geminiResponse.Status == 50 || geminiResponse.Status == 51)
             {
-                mMainWindow.ToastNotify("Page not found (status 51)\n\n" + e.Uri.ToString(), ToastMessageStyles.Warning);
+                mMainWindow.ToastNotify("Page not found (status 51)\n\n" + uri.ToString(), ToastMessageStyles.Warning);
             }
             else
             {
@@ -325,17 +320,17 @@ namespace GemiNaut
             mMainWindow.ToggleContainerControlsForBrowser(true);
 
             //no further navigation right now
-            e.Cancel = true;
+            return navigated;
         }
 
         //navigate to a url but get some user input first
-        public void NavigateGeminiWithInput(System.Windows.Navigation.NavigatingCancelEventArgs e, string message)
+        public bool NavigateGeminiWithInput(Uri uri, string message)
         {
             //position input box approx in middle of main window
 
             var windowCentre = WindowGeometry.WindowCentre(mMainWindow);
             var inputPrompt = "Input request from Gemini server\n\n" +
-                "  " + e.Uri.Host + e.Uri.LocalPath + "\n\n" +
+                "  " + uri.Host + uri.LocalPath + "\n\n" +
                 message;
 
             string input = Interaction.InputBox(inputPrompt, "Server input request", "", windowCentre.Item1, windowCentre.Item2);
@@ -344,22 +339,24 @@ namespace GemiNaut
             {
                 //encode the query
                 var b = new UriBuilder();
-                b.Scheme = e.Uri.Scheme;
-                b.Host = e.Uri.Host;
-                if (e.Uri.Port != -1) { b.Port = e.Uri.Port; }
-                b.Path = e.Uri.LocalPath;
+                b.Scheme = uri.Scheme;
+                b.Host = uri.Host;
+                if (uri.Port != -1) { b.Port = uri.Port; }
+                b.Path = uri.LocalPath;
                 //!%22%C2%A3$%25%5E&*()_+1234567890-=%7B%7D:@~%3C%3E?[];'#,./
                 b.Query = Uri.EscapeDataString(input);      //escape the query result
 
                 //ToastNotify(b.ToString());
 
-                mWebBrowser.Navigate(b.ToString());
+                mMainWindow.Navigate(b.ToString());
             }
             else
             {
                 //dont do anything further with navigating the browser
-                e.Cancel = true;
+                return false;
             }
+
+            return true;
         }
     }
 }

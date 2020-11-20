@@ -26,21 +26,18 @@ using GemiNaut.Views;
 using Microsoft.Win32;
 using System;
 using System.IO;
-using System.Windows.Controls;
-using System.Windows.Navigation;
 using static GemiNaut.Views.MainWindow;
 
 namespace GemiNaut
 {
     public class HttpNavigator
     {
+        private static readonly Settings _settings = new Settings();
         private readonly MainWindow mMainWindow;
-        private readonly WebBrowser mWebBrowser;
 
-        public HttpNavigator(MainWindow mainWindow, WebBrowser browserControl)
+        public HttpNavigator(MainWindow mainWindow)
         {
             mMainWindow = mainWindow;
-            mWebBrowser = browserControl;
         }
 
         public static bool IsModeSwitch(string linkId)
@@ -50,16 +47,14 @@ namespace GemiNaut
                         linkId == "web-switch-all";
         }
 
-        public void NavigateHttpScheme(string fullQuery, NavigatingCancelEventArgs e, SiteIdentity siteIdentity, string linkId)
+        public bool NavigateHttpScheme(string fullQuery, Uri uri, SiteIdentity siteIdentity, string linkId)
         {
-            var httpUri = e.Uri.OriginalString;
+            var httpUri = uri.OriginalString;
 
             var sessionPath = Session.Instance.SessionPath;
             var appDir = AppDomain.CurrentDomain.BaseDirectory;
 
             var hash = HashService.GetMd5Hash(fullQuery);
-
-            var settings = new Settings();
 
             //uses .txt as extension so content loaded as text/plain not interpreted by the browser
             //if user requests a view-source.
@@ -80,8 +75,8 @@ namespace GemiNaut
                 result = new Tuple<int, string, string>(0, "", "");
 
                 //set default mode to this mode
-                settings.WebRenderMode = linkId;
-                settings.Save();
+                _settings.WebRenderMode = linkId;
+                _settings.Save();
             }
             else
             {
@@ -106,8 +101,7 @@ namespace GemiNaut
                 {
                     mMainWindow.ToastNotify("Could not access web resource: " + fullQuery + "\n" + result.Item3, ToastMessageStyles.Warning);
                     mMainWindow.ToggleContainerControlsForBrowser(true);
-                    e.Cancel = true;
-                    return;
+                    return false;
                 }
 
                 httpResponse.ParseGemGet(result.Item2);   //parse stdout   
@@ -118,8 +112,7 @@ namespace GemiNaut
                     {
                         mMainWindow.ToastNotify("Resource not found:\n" + fullQuery, ToastMessageStyles.Warning);
                         mMainWindow.ToggleContainerControlsForBrowser(true);
-                        e.Cancel = true;
-                        return;
+                        return false;
                     }
                     //ToastNotify(httpResponse.Status + " " + httpResponse.Meta);  
                 }
@@ -130,8 +123,7 @@ namespace GemiNaut
                         + httpResponse.Status + "\n"
                         + fullQuery, ToastMessageStyles.Warning);
                     mMainWindow.ToggleContainerControlsForBrowser(true);
-                    e.Cancel = true;
-                    return;
+                    return false;
                 }
             }
 
@@ -150,7 +142,7 @@ namespace GemiNaut
 
                     var htmlPath = "";
 
-                    if (settings.WebRenderMode == "web-switch-plain")
+                    if (_settings.WebRenderMode == "web-switch-plain")
                     {
                         //pass options to goose to get plain text
                         gooseCommand = string.Format(
@@ -166,7 +158,7 @@ namespace GemiNaut
                     }
                     else
                     {
-                        if (settings.WebRenderMode == "web-switch-simplified")
+                        if (_settings.WebRenderMode == "web-switch-simplified")
                         {
                             //pass options to goose to get main content as html
                             gooseCommand = string.Format(
@@ -193,8 +185,7 @@ namespace GemiNaut
                         {
                             mMainWindow.ToastNotify("Could not render HTML as GMI: " + fullQuery, ToastMessageStyles.Error);
                             mMainWindow.ToggleContainerControlsForBrowser(true);
-                            e.Cancel = true;
-                            return;
+                            return false;
                         }
                     }
                 }
@@ -207,8 +198,7 @@ namespace GemiNaut
                     {
                         mMainWindow.ToastNotify("Could not render text as GMI: " + fullQuery, ToastMessageStyles.Error);
                         mMainWindow.ToggleContainerControlsForBrowser(true);
-                        e.Cancel = true;
-                        return;
+                        return false;
                     }
                 }
                 else
@@ -223,7 +213,7 @@ namespace GemiNaut
 
                     if (httpResponse.ContentType.Contains("image/"))
                     {
-                        mMainWindow.ShowImage(fullQuery, binFile, e);
+                        mMainWindow.ShowImage(fullQuery, binFile);
                     }
                     else
                     {
@@ -249,10 +239,10 @@ namespace GemiNaut
                         }
 
                         mMainWindow.ToggleContainerControlsForBrowser(true);
-                        e.Cancel = true;
+                        return false;
                     }
 
-                    return;
+                    return true;
                 }
 
                 if (httpResponse.Redirected)
@@ -294,13 +284,13 @@ namespace GemiNaut
 
                 var userThemesFolder = ResourceFinder.LocalOrDevFolder(appDir, @"GmiConverters\themes", @"..\..\GmiConverters\themes");
 
-                var userThemeBase = Path.Combine(userThemesFolder, settings.Theme);
+                var userThemeBase = Path.Combine(userThemesFolder, _settings.Theme);
 
-                mMainWindow.ShowUrl(httpUri, gmiFile, htmlFile, userThemeBase, siteIdentity, e);
+                mMainWindow.ShowUrl(httpUri, gmiFile, htmlFile, userThemeBase, siteIdentity);
             }
             else if (httpResponse.StatusCode == 404)
             {
-                mMainWindow.ToastNotify("Page not found (status 51)\n\n" + e.Uri.ToString(), ToastMessageStyles.Warning);
+                mMainWindow.ToastNotify("Page not found (status 51)\n\n" + uri.ToString(), ToastMessageStyles.Warning);
             }
             else
             {
@@ -317,7 +307,7 @@ namespace GemiNaut
             mMainWindow.ToggleContainerControlsForBrowser(true);
 
             //no further navigation right now
-            e.Cancel = true;
+            return false;
         }
     }
 }

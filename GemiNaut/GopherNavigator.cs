@@ -26,20 +26,18 @@ using Microsoft.VisualBasic;
 using Microsoft.Win32;
 using System;
 using System.IO;
-using System.Windows.Controls;
 using static GemiNaut.Views.MainWindow;
 
 namespace GemiNaut
 {
     public class GopherNavigator
     {
+        private readonly Settings _settings = new Settings();
         private readonly MainWindow mMainWindow;
-        private readonly WebBrowser mWebBrowser;
 
-        public GopherNavigator(MainWindow window, WebBrowser browser)
+        public GopherNavigator(MainWindow window)
         {
             mMainWindow = window;
-            mWebBrowser = browser;
         }
 
         public enum GopherParseTypes
@@ -48,13 +46,13 @@ namespace GemiNaut
         }
 
         //navigate to a url but get some user input first
-        private void NavigateGopherWithInput(System.Windows.Navigation.NavigatingCancelEventArgs e)
+        private bool NavigateGopherWithInput(Uri uri)
         {
             //position input box approx in middle of main window
 
             var windowCentre = WindowGeometry.WindowCentre(mMainWindow);
             var inputPrompt = "Input request from Gopher server\n\n" +
-                "  " + e.Uri.Host + e.Uri.LocalPath + "\n\n" +
+                "  " + uri.Host + uri.LocalPath + "\n\n" +
                 "Please provide your input:";
 
             string input = Interaction.InputBox(inputPrompt, "Server input request", "", windowCentre.Item1, windowCentre.Item2);
@@ -63,10 +61,10 @@ namespace GemiNaut
             {
                 //encode the query
                 var b = new UriBuilder();
-                b.Scheme = e.Uri.Scheme;
-                b.Host = e.Uri.Host;
-                if (e.Uri.Port != -1) { b.Port = e.Uri.Port; }
-                b.Path = e.Uri.LocalPath;
+                b.Scheme = uri.Scheme;
+                b.Host = uri.Host;
+                if (uri.Port != -1) { b.Port = uri.Port; }
+                b.Path = uri.LocalPath;
 
                 //!%22%C2%A3$%25%5E&*()_+1234567890-=%7B%7D:@~%3C%3E?[];'#,./
 
@@ -74,31 +72,35 @@ namespace GemiNaut
                 var query = b.ToString() + "%09" + Uri.EscapeDataString(input);      //escape the query result;
                 //ToastNotify(query);
 
-                mWebBrowser.Navigate(query);
+                mMainWindow.Navigate(query);
             }
             else
             {
                 //dont do anything further with navigating the browser
-                e.Cancel = true;
+                return false;
             }
+
+            return true;
         }
 
-        public void NavigateGopherScheme(string fullQuery, System.Windows.Navigation.NavigatingCancelEventArgs e, SiteIdentity siteIdentity)
+        public bool NavigateGopherScheme(string fullQuery, Uri uri, SiteIdentity siteIdentity)
         {
+            bool cancelled =  false;
+
             var sessionPath = Session.Instance.SessionPath;
             var appDir = AppDomain.CurrentDomain.BaseDirectory;
 
             //check if it is a query selector without a parameter
-            if (!e.Uri.OriginalString.Contains("%09") && e.Uri.PathAndQuery.StartsWith("/7/"))
+            if (!uri.OriginalString.Contains("%09") && uri.PathAndQuery.StartsWith("/7/"))
             {
-                NavigateGopherWithInput(e);
+                cancelled = NavigateGopherWithInput(uri);
 
                 mMainWindow.ToggleContainerControlsForBrowser(true);
 
                 //no further navigation right now
-                e.Cancel = true;
+                cancelled = true;
 
-                return;
+                return cancelled;
             }
 
             //use local or dev binary for gemget
@@ -130,8 +132,8 @@ namespace GemiNaut
             {
                 mMainWindow.ToastNotify(result.Item3, ToastMessageStyles.Error);
                 mMainWindow.ToggleContainerControlsForBrowser(true);    //reenable browser
-                e.Cancel = true;
-                return;
+                cancelled = true;
+                return cancelled;
             }
 
             if (File.Exists(gopherFile))
@@ -166,7 +168,7 @@ namespace GemiNaut
                     if (stdOut.Contains("IMG") || stdOut.Contains("GIF"))
                     {
                         //show the image
-                        mMainWindow.ShowImage(fullQuery, binFile, e);
+                        mMainWindow.ShowImage(fullQuery, binFile);
                     }
                     else
                     {
@@ -193,28 +195,29 @@ namespace GemiNaut
                         }
 
                         mMainWindow.ToggleContainerControlsForBrowser(true);
-                        e.Cancel = true;
+                        cancelled = true;
                     }
 
-                    return;
+                    return cancelled;
                 }
 
                 if (!File.Exists(gmiFile))
                 {
                     mMainWindow.ToastNotify("Did not create expected GMI file for " + fullQuery + " in " + gmiFile, ToastMessageStyles.Error);
                     mMainWindow.ToggleContainerControlsForBrowser(true);
-                    e.Cancel = true;
+                    cancelled = true;
                 }
                 else
                 {
-                    var settings = new Settings();
                     var userThemesFolder = ResourceFinder.LocalOrDevFolder(appDir, @"GmiConverters\themes", @"..\..\GmiConverters\themes");
 
-                    var userThemeBase = Path.Combine(userThemesFolder, settings.Theme);
+                    var userThemeBase = Path.Combine(userThemesFolder, _settings.Theme);
 
-                    mMainWindow.ShowUrl(fullQuery, parseFile, htmlFile, userThemeBase, siteIdentity, e);
+                    mMainWindow.ShowUrl(fullQuery, parseFile, htmlFile, userThemeBase, siteIdentity);
                 }
             }
+
+            return cancelled;
         }
     }
 }

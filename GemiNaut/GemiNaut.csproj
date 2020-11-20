@@ -9,9 +9,10 @@
     <ApplicationIcon>Resources\pretty-text.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Microsoft.mshtml, Version=7.0.3300.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
-      <EmbedInteropTypes>True</EmbedInteropTypes>
-    </Reference>
+    <Compile Remove="HtmlRenderer\**" />
+    <EmbeddedResource Remove="HtmlRenderer\**" />
+    <None Remove="HtmlRenderer\**" />
+    <Page Remove="HtmlRenderer\**" />
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Resources\pretty-text.ico" />
@@ -20,9 +21,12 @@
     <PackageReference Include="Jdenticon-net" Version="2.2.1" />
     <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageReference Include="Microsoft.VisualBasic" Version="10.3.0" />
+    <PackageReference Include="PDFsharp" Version="1.50.5147" />
     <PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
     <PackageReference Include="ToastNotifications.Messages" Version="2.5.1" />
-    <PackageReference Include="Unofficial.Microsoft.mshtml" Version="7.0.3300" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="HtmlRenderer\Source\HtmlRenderer.WPF\HtmlRenderer.WPF.csproj" />
   </ItemGroup>
   <ItemGroup>
 	<None Update="Rebol\*">

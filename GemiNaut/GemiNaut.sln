@@ -1,9 +1,13 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.27130.2024
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30711.63
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GemiNaut", "GemiNaut.csproj", "{5D9DFB0C-E91C-4DB8-8A81-6E044CF9D906}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "GemiNaut", "GemiNaut.csproj", "{5D9DFB0C-E91C-4DB8-8A81-6E044CF9D906}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HtmlRenderer.WPF", "HtmlRenderer\Source\HtmlRenderer.WPF\HtmlRenderer.WPF.csproj", "{D14590E2-D810-454E-B9E5-834C3C43A87E}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HtmlRenderer", "HtmlRenderer\Source\HtmlRenderer\HtmlRenderer.csproj", "{C15212B5-B3FB-4DBA-88B1-BDB9F8B47FCC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +19,14 @@ Global
 		{5D9DFB0C-E91C-4DB8-8A81-6E044CF9D906}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5D9DFB0C-E91C-4DB8-8A81-6E044CF9D906}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5D9DFB0C-E91C-4DB8-8A81-6E044CF9D906}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D14590E2-D810-454E-B9E5-834C3C43A87E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D14590E2-D810-454E-B9E5-834C3C43A87E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D14590E2-D810-454E-B9E5-834C3C43A87E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D14590E2-D810-454E-B9E5-834C3C43A87E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C15212B5-B3FB-4DBA-88B1-BDB9F8B47FCC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C15212B5-B3FB-4DBA-88B1-BDB9F8B47FCC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C15212B5-B3FB-4DBA-88B1-BDB9F8B47FCC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C15212B5-B3FB-4DBA-88B1-BDB9F8B47FCC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

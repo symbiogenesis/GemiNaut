@@ -1,6 +1,6 @@
 ﻿using GemiNaut.Properties;
 using System.Windows;
-using System.Windows.Controls;
+using TheArtOfDev.HtmlRenderer.WPF;
 
 namespace GemiNaut.Views
 {
@@ -10,9 +10,9 @@ namespace GemiNaut.Views
     public partial class Bookmarks : Window
     {
         private readonly MainWindow _mainWindow;
-        private readonly WebBrowser _webBrowser;
+        private readonly HtmlPanel _webBrowser;
 
-        public Bookmarks(MainWindow window, WebBrowser browser)
+        public Bookmarks(MainWindow window, HtmlPanel browser)
         {
             InitializeComponent();
 

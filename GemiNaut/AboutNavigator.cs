@@ -1,5 +1,6 @@
 ﻿using GemiNaut.Singletons;
 using GemiNaut.Views;
+using System;
 using System.IO;
 using System.Windows.Controls;
 using static GemiNaut.Views.MainWindow;
@@ -9,15 +10,13 @@ namespace GemiNaut
     public class AboutNavigator
     {
         private readonly MainWindow mMainWindow;
-        private readonly WebBrowser mWebBrowser;
 
-        public AboutNavigator(MainWindow window, WebBrowser browser)
+        public AboutNavigator(MainWindow window)
         {
             mMainWindow = window;
-            mWebBrowser = browser;
         }
 
-        public void NavigateAboutScheme(System.Windows.Navigation.NavigatingCancelEventArgs e, SiteIdentity siteIdentity)
+        public bool NavigateAboutScheme(Uri uri, SiteIdentity siteIdentity)
         {
             var sessionPath = Session.Instance.SessionPath;
             var appDir = System.AppDomain.CurrentDomain.BaseDirectory;
@@ -27,11 +26,11 @@ namespace GemiNaut
             //no further action
             mMainWindow.ToggleContainerControlsForBrowser(true);
 
-            var sourceFileName = e.Uri.PathAndQuery.Substring(1);      //trim off leading /
+            var sourceFileName = uri.PathAndQuery.Substring(1);      //trim off leading /
 
             //this expects uri has a "geminaut" domain so gmitohtml converter can proceed for now
             //I think it requires a domain for parsing...
-            fullQuery = e.Uri.OriginalString;
+            fullQuery = uri.OriginalString;
 
             var hash = HashService.GetMd5Hash(fullQuery);
 
@@ -47,13 +46,15 @@ namespace GemiNaut
             if (File.Exists(helpFile))
             {
                 File.Copy(helpFile, hashFile, true);
-                mMainWindow.ShowUrl(fullQuery, hashFile, htmlCreateFile, templateBaseName, siteIdentity, e);
+                mMainWindow.ShowUrl(fullQuery, hashFile, htmlCreateFile, templateBaseName, siteIdentity);
             }
             else
             {
                 mMainWindow.ToastNotify("No content was found for: " + fullQuery, ToastMessageStyles.Warning);
-                e.Cancel = true;
+                return false;
             }
+
+            return true;
         }
     }
 }

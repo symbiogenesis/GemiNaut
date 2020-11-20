@@ -12,13 +12,16 @@ using GemiNaut.Singletons;
 using System.Windows.Controls;
 using System.Text.RegularExpressions;
 using GemiNaut.Properties;
-using mshtml;
-using System.Windows.Navigation;
+using System.Xml.Linq;
+using System.Linq;
+using TheArtOfDev.HtmlRenderer.WPF;
+using TheArtOfDev.HtmlRenderer.Core.Entities;
 
 namespace GemiNaut.Views
 {
     public partial class MainWindow : Window
     {
+        private static readonly Settings _settings = new Settings();
         private readonly Dictionary<string, string> _urlsByHash;
         private readonly Notifier _notifier;
         private readonly BookmarkManager _bookmarkManager;
@@ -27,6 +30,8 @@ namespace GemiNaut.Views
         public MainWindow()
         {
             InitializeComponent();
+
+            BrowserControl.LinkClicked += HtmlPanel_LinkClicked;
 
             _notifier = new Notifier(cfg =>
             {
@@ -53,8 +58,7 @@ namespace GemiNaut.Views
 
             _bookmarkManager.RefreshBookmarkMenu();
 
-            var settings = new Settings();
-            var launchUri = settings.HomeUrl;
+            var launchUri = _settings.HomeUrl;
 
             string[] args = App.Args;
             if (args != null)
@@ -62,10 +66,15 @@ namespace GemiNaut.Views
                 launchUri = App.Args[0];
             }
 
-            BrowserControl.Navigate(launchUri);
+            Navigate(launchUri);
 
             BuildThemeMenu();
             TickSelectedThemeMenu();
+        }
+
+        private void HtmlPanel_LinkClicked(object sender, RoutedEventArgs<HtmlLinkClickedEventArgs> args)
+        {
+            Navigate(args.Data.Link);
         }
 
         private void TxtUrl_KeyUp(object sender, KeyEventArgs e)
@@ -74,7 +83,7 @@ namespace GemiNaut.Views
             {
                 if (UriTester.TextIsUri(txtUrl.Text))
                 {
-                    BrowserControl.Navigate(txtUrl.Text);
+                    Navigate(txtUrl.Text);
                 }
                 else
                 {
@@ -96,127 +105,26 @@ namespace GemiNaut.Views
             GridMain.IsEnabled = toState;
         }
 
-        private void BrowserControl_Navigating(object sender, NavigatingCancelEventArgs e)
-        {
-            _isNavigating = true;
-
-            var normalisedUri = UriTester.NormaliseUri(e.Uri);
-
-            var siteIdentity = new SiteIdentity(normalisedUri, Session.Instance);
-
-            var fullQuery = normalisedUri.OriginalString;
-
-            //sanity check we have a valid URL syntax at least
-            if (e.Uri.Scheme == null)
-            {
-                ToastNotify("Invalid URL: " + normalisedUri.OriginalString, ToastMessageStyles.Error);
-                e.Cancel = true;
-            }
-
-            var settings = new Settings();
-
-            ToggleContainerControlsForBrowser(false);
-
-            //these are the only ones we "navigate" to. We do this by downloading the GMI content
-            //converting to HTML and then actually navigating to that.
-            if (normalisedUri.Scheme == "gemini")
-            {
-                var geminiNavigator = new GeminiNavigator(this, this.BrowserControl);
-                geminiNavigator.NavigateGeminiScheme(fullQuery, e, siteIdentity);
-            }
-            else if (normalisedUri.Scheme == "gopher")
-            {
-                var gopherNavigator = new GopherNavigator(this, this.BrowserControl);
-                gopherNavigator.NavigateGopherScheme(fullQuery, e, siteIdentity);
-            }
-            else if (normalisedUri.Scheme == "about")
-            {
-                var aboutNavigator = new AboutNavigator(this, this.BrowserControl);
-                aboutNavigator.NavigateAboutScheme(e, siteIdentity);
-            }
-            else if (normalisedUri.Scheme.StartsWith("http"))       //both http and https
-            {
-                var linkId = "";
-                ////doc might be null - you need to check when using!
-                var doc = (HTMLDocument)BrowserControl.Document;
-                ////this is how we could detect a click on a link to an image...
-                if (doc?.activeElement != null)
-                {
-                    linkId = doc.activeElement.id;
-                }
-
-                //detect ctrl click
-                if (
-                     Keyboard.IsKeyDown(Key.LeftCtrl) ||
-                     Keyboard.IsKeyDown(Key.RightCtrl) ||
-                     settings.HandleWebLinks == "System web browser" ||
-                     linkId == "web-launch-external"
-                    )
-                {
-                    //open in system web browser
-                    var launcher = new ExternalNavigator(this);
-                    launcher.LaunchExternalUri(e.Uri.ToString());
-                    ToggleContainerControlsForBrowser(true);
-                    e.Cancel = true;
-                }
-                else if (settings.HandleWebLinks == "Gemini HTTP proxy")
-                {
-                    // use a gemini proxy for http links
-                    var geminiNavigator = new GeminiNavigator(this, this.BrowserControl);
-                    geminiNavigator.NavigateGeminiScheme(fullQuery, e, siteIdentity);
-                }
-                else
-                {
-                    //use internal navigator
-                    var httpNavigator = new HttpNavigator(this, this.BrowserControl);
-                    httpNavigator.NavigateHttpScheme(fullQuery, e, siteIdentity, linkId);
-                }
-            }
-            else if (normalisedUri.Scheme == "file")
-            {
-                //just load the converted html file
-                //no further action.
-            }
-            else
-            {
-                //we don't care about any other protocols
-                //so we open those in system web browser to deal with
-                var launcher = new ExternalNavigator(this);
-                launcher.LaunchExternalUri(e.Uri.ToString());
-                ToggleContainerControlsForBrowser(true);
-                e.Cancel = true;
-            }
-
-            if (e.Cancel)
-            {
-                _isNavigating = false;
-            }
-        }
-
-        public void ShowImage(string sourceUrl, string imgFile, NavigatingCancelEventArgs e)
+        public void ShowImage(string sourceUrl, string imgFile)
         {
             var hash = HashService.GetMd5Hash(sourceUrl);
 
             _urlsByHash[hash] = sourceUrl;
 
-            //no further navigation right now
-            e.Cancel = true;
-
             //instead tell the browser to load the content
-            BrowserControl.Navigate(@"file:///" + imgFile);
+            Navigate(@"file:///" + imgFile);
         }
 
-        public void ShowUrl(string sourceUrl, string gmiFile, string htmlFile, string themePath, SiteIdentity siteIdentity, NavigatingCancelEventArgs e)
+        public void ShowUrl(string sourceUrl, string gmiFile, string htmlFile, string themePath, SiteIdentity siteIdentity)
         {
             var hash = HashService.GetMd5Hash(sourceUrl);
 
             var usedShowWebHeaderInfo = false;
 
-            var settings = new Settings();
             var uri = new UriBuilder(sourceUrl);
 
             //only show web header for self generated content, not proxied
-            usedShowWebHeaderInfo = uri.Scheme.StartsWith("http") && settings.HandleWebLinks != "Gemini HTTP proxy";
+            usedShowWebHeaderInfo = uri.Scheme.StartsWith("http") && _settings.HandleWebLinks != "Gemini HTTP proxy";
 
             //create the html file
             ConverterService.CreateDirectoriesIfNeeded(gmiFile, htmlFile, themePath);
@@ -227,17 +135,13 @@ namespace GemiNaut.Views
                 ToastNotify("GMIToHTML did not create content for " + sourceUrl + "\n\nFile: " + gmiFile, ToastMessageStyles.Error);
 
                 ToggleContainerControlsForBrowser(true);
-                e.Cancel = true;
             }
             else
             {
                 _urlsByHash[hash] = sourceUrl;
 
-                //no further navigation right now
-                e.Cancel = true;
-
                 //instead tell the browser to load the content
-                BrowserControl.Navigate(@"file:///" + htmlFile);
+                Navigate(@"file:///" + htmlFile);
             }
         }
 
@@ -270,12 +174,12 @@ namespace GemiNaut.Views
 
         private void BrowseBack_CanExecute(object sender, CanExecuteRoutedEventArgs e)
         {
-            e.CanExecute = ((BrowserControl != null) && (BrowserControl.CanGoBack));
+            // e.CanExecute = ((BrowserControl != null) && (BrowserControl.CanGoBack));
         }
 
         private void BrowseBack_Executed(object sender, ExecutedRoutedEventArgs e)
         {
-            BrowserControl.GoBack();
+            // BrowserControl.GoBack();
         }
 
         private void BrowseHome_CanExecute(object sender, CanExecuteRoutedEventArgs e)
@@ -285,18 +189,17 @@ namespace GemiNaut.Views
 
         private void BrowseHome_Executed(object sender, ExecutedRoutedEventArgs e)
         {
-            var settings = new Settings();
-            BrowserControl.Navigate(settings.HomeUrl);
+            Navigate(_settings.HomeUrl);
         }
 
         private void BrowseForward_CanExecute(object sender, CanExecuteRoutedEventArgs e)
         {
-            e.CanExecute = ((BrowserControl != null) && (BrowserControl.CanGoForward));
+            // e.CanExecute = ((BrowserControl != null) && (BrowserControl.CanGoForward));
         }
 
         private void BrowseForward_Executed(object sender, ExecutedRoutedEventArgs e)
         {
-            BrowserControl.GoForward();
+            // BrowserControl.GoForward();
         }
 
         private void GoToPage_CanExecute(object sender, CanExecuteRoutedEventArgs e)
@@ -308,7 +211,7 @@ namespace GemiNaut.Views
         {
             if (UriTester.TextIsUri(txtUrl.Text))
             {
-                BrowserControl.Navigate(txtUrl.Text);
+                Navigate(txtUrl.Text);
             }
             else
             {
@@ -335,7 +238,7 @@ namespace GemiNaut.Views
         private void MenuHelpContents_Click(object sender, RoutedEventArgs e)
         {
             //this will be a look up into docs folder
-            BrowserControl.Navigate("about://geminaut/help.gmi");
+            Navigate("about://geminaut/help.gmi");
         }
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
@@ -358,7 +261,7 @@ namespace GemiNaut.Views
             //uses .txt as extension so content loaded as text/plain not interpreted by the browser
             var gmiFile = sessionPath + "\\" + hash + ".txt";
 
-            BrowserControl.Navigate(gmiFile);
+            Navigate(gmiFile);
         }
 
         private void MenuViewSettings_Click(object sender, RoutedEventArgs e)
@@ -368,77 +271,33 @@ namespace GemiNaut.Views
             settingsEditor.ShowDialog();
         }
 
-        //after any navigate (even back/forwards) 
-        //update the address box depending on the current location
-        private void BrowserControl_Navigated(object sender, NavigationEventArgs e)
-        {
-            var uri = e.Uri.ToString();
-
-            //look up the URL that this HTML page shows
-            var regex = new Regex(@".*/([a-f0-9]+)\.(.*)");
-            if (regex.IsMatch(uri))
-            {
-                var match = regex.Match(uri);
-                var hash = match.Groups[1].ToString();
-
-                string geminiUrl = _urlsByHash[hash];
-                if (geminiUrl != null)
-                {
-                    //now show the actual gemini URL in the address bar
-                    txtUrl.Text = geminiUrl;
-
-                    ShowTitle(BrowserControl.Document);
-
-                    var originalUri = new UriBuilder(geminiUrl);
-
-                    if (originalUri.Scheme == "http" || originalUri.Scheme == "https")
-                    {
-                        ShowLinkRenderMode(BrowserControl.Document);
-                    }
-                }
-
-                //if a text file (i.e. view->source), explicitly set the charset
-                //to UTF-8 so ascii art looks correct etc.
-                if ("txt" == match.Groups[2].ToString().ToLower())
-                {
-                    //set text files (GMI source) to be UTF-8 for now
-                    var doc = (HTMLDocument)BrowserControl.Document;
-                    doc.charset = "UTF-8";
-                }
-            }
-
-            BrowserControl.Focus();
-            ((HTMLDocument)BrowserControl.Document).focus();
-
-            _isNavigating = false;
-        }
-
         //decorate links that switch the mode so the current mode is highlighted
-        private static void ShowLinkRenderMode(dynamic document)
+        private static void ShowLinkRenderMode(string html)
         {
-            var doc = (HTMLDocument)document;
-            var settings = new Settings();
+            var doc = XDocument.Parse(html);
 
             //decrate the current mode
-            if (doc.getElementById(settings.WebRenderMode) != null)
+            var modeLink = doc.Descendants(_settings.WebRenderMode).First();
+            if (modeLink != null)
             {
-                var modeLink = doc.getElementById(settings.WebRenderMode);
-                modeLink.innerText = "[" + modeLink.innerText + "]";
-                modeLink.style.fontWeight = "bold";
+                modeLink.Value = "[" + modeLink.Value + "]";
+                modeLink.SetAttributeValue("FontWeight", "bold");
             }
         }
 
-        private void ShowTitle(dynamic document)
+        private void ShowTitle(HtmlPanel panel)
         {
             //update title, this might fail when called from Navigated as the document might not be ready yet
             //but we also call on LoadCompleted. This should catch both situations
             //of real navigation and also back and forth in history
 
+            var title = panel.GetTitle();
+
             const string geminiTitle = "GemiNaut, a friendly GUI browser";
 
             try
             {
-                Application.Current.MainWindow.Title = document == null ? geminiTitle : document.Title + " - " + geminiTitle;
+                Application.Current.MainWindow.Title = title == null ? geminiTitle : title + " - " + geminiTitle;
             }
             catch (Exception e)
             {
@@ -464,11 +323,9 @@ namespace GemiNaut.Views
 
         private void TickSelectedThemeMenu()
         {
-            var settings = new Settings();
-
             foreach (MenuItem themeMenu in mnuTheme.Items)
             {
-                themeMenu.IsChecked = (themeMenu.Header.ToString() == settings.Theme);
+                themeMenu.IsChecked = (themeMenu.Header.ToString() == _settings.Theme);
             }
         }
 
@@ -477,43 +334,27 @@ namespace GemiNaut.Views
             var menu = (MenuItem)sender;
             var themeName = menu.Header.ToString();
 
-            var settings = new Settings();
-            if (settings.Theme != themeName)
+            if (_settings.Theme != themeName)
             {
-                settings.Theme = themeName;
-                settings.Save();
+                _settings.Theme = themeName;
+                _settings.Save();
 
                 TickSelectedThemeMenu();
 
                 //redisplay
-                BrowserControl.Navigate(txtUrl.Text);
+                Navigate(txtUrl.Text);
             }
-        }
-
-        private void BrowserControl_LoadCompleted(object sender, NavigationEventArgs e)
-        {
-            var doc = ((WebBrowser)sender).Document;
-
-            ShowTitle(doc);
-
-            //we need to turn on/off other elements so focus doesnt move elsewhere
-            //in that case the keyboard events go elsewhere and you have to click 
-            //into the browser to get it to work again
-            //see https://stackoverflow.com/questions/8495857/webbrowser-steals-focus
-            ToggleContainerControlsForBrowser(true);
         }
 
         private void mnuMenuBookmarksAdd_Click(object sender, RoutedEventArgs e)
         {
             var bmManager = new BookmarkManager(this, BrowserControl);
-            bmManager.AddBookmark(txtUrl.Text, ((HTMLDocument)BrowserControl.Document).title);
+            bmManager.AddBookmark(txtUrl.Text, BrowserControl.GetTitle());
             var url = txtUrl.Text;
         }
 
         private void mnuMenuBookmarksEdit_Click(object sender, RoutedEventArgs e)
         {
-            var settings = new Settings();
-
             Bookmarks winBookmarks = new Bookmarks(this, BrowserControl);
 
             //show modally
@@ -525,7 +366,7 @@ namespace GemiNaut.Views
         {
             var menuItem = (MenuItem)sender;
 
-            BrowserControl.Navigate(menuItem.CommandParameter.ToString());
+            Navigate(menuItem.CommandParameter.ToString());
         }
 
         private void MenuFileNew_Click(object sender, RoutedEventArgs e)
@@ -542,6 +383,137 @@ namespace GemiNaut.Views
             };
 
             Process.Start(info);
+        }
+
+        public void Navigate(string uriString)
+        {
+            _isNavigating = true;
+
+            bool cancelled = false;
+
+            var uri = new Uri(uriString);
+
+            var normalisedUri = UriTester.NormaliseUri(uri);
+
+            var siteIdentity = new SiteIdentity(normalisedUri, Session.Instance);
+
+            var fullQuery = normalisedUri.OriginalString;
+
+            //sanity check we have a valid URL syntax at least
+            if (normalisedUri.Scheme == null)
+            {
+                ToastNotify("Invalid URL: " + normalisedUri.OriginalString, ToastMessageStyles.Error);
+                cancelled = true;
+            }
+
+            ToggleContainerControlsForBrowser(false);
+
+            //these are the only ones we "navigate" to. We do this by downloading the GMI content
+            //converting to HTML and then actually navigating to that.
+            if (normalisedUri.Scheme == "gemini")
+            {
+                var geminiNavigator = new GeminiNavigator(this);
+                cancelled = geminiNavigator.NavigateGeminiScheme(fullQuery, uri, siteIdentity);
+            }
+            else if (normalisedUri.Scheme == "gopher")
+            {
+                var gopherNavigator = new GopherNavigator(this);
+                cancelled = gopherNavigator.NavigateGopherScheme(fullQuery, uri, siteIdentity);
+            }
+            else if (normalisedUri.Scheme == "about")
+            {
+                var aboutNavigator = new AboutNavigator(this);
+                cancelled = aboutNavigator.NavigateAboutScheme(uri, siteIdentity);
+            }
+            else if (normalisedUri.Scheme.StartsWith("http"))       //both http and https
+            {
+                //detect ctrl click
+                if (_settings.HandleWebLinks == "System web browser")
+                {
+                    //open in system web browser
+                    var launcher = new ExternalNavigator(this);
+                    launcher.LaunchExternalUri(uri.ToString());
+                    ToggleContainerControlsForBrowser(true);
+                    cancelled = true;
+                }
+                else if (_settings.HandleWebLinks == "Gemini HTTP proxy")
+                {
+                    // use a gemini proxy for http links
+                    var geminiNavigator = new GeminiNavigator(this);
+                    cancelled = geminiNavigator.NavigateGeminiScheme(fullQuery, uri, siteIdentity);
+                }
+                else
+                {
+                    //use internal navigator
+                    var httpNavigator = new HttpNavigator(this);
+                    cancelled = httpNavigator.NavigateHttpScheme(fullQuery, uri, siteIdentity, "web-launch-external");
+                }
+            }
+            else if (normalisedUri.Scheme == "file")
+            {
+                //just load the converted html file
+                //no further action.
+
+                BrowserControl.Text = File.ReadAllText(normalisedUri.LocalPath);
+            }
+            else
+            {
+                //we don't care about any other protocols
+                //so we open those in system web browser to deal with
+                var launcher = new ExternalNavigator(this);
+                launcher.LaunchExternalUri(uri.ToString());
+                ToggleContainerControlsForBrowser(true);
+                cancelled = true;
+            }
+
+            if (!cancelled)
+            {
+                uriString = uri.ToString();
+
+                //look up the URL that this HTML page shows
+                var regex = new Regex(@".*/([a-f0-9]+)\.(.*)");
+                if (regex.IsMatch(uriString))
+                {
+                    var match = regex.Match(uriString);
+                    var hash = match.Groups[1].ToString();
+
+                    string geminiUrl = _urlsByHash[hash];
+                    if (geminiUrl != null)
+                    {
+                        //now show the actual gemini URL in the address bar
+                        txtUrl.Text = geminiUrl;
+
+                        ShowTitle(BrowserControl);
+
+                        var originalUri = new UriBuilder(geminiUrl);
+
+                        if (originalUri.Scheme == "http" || originalUri.Scheme == "https")
+                        {
+                            ShowLinkRenderMode(BrowserControl.Text);
+                        }
+                    }
+
+                    //if a text file (i.e. view->source), explicitly set the charset
+                    //to UTF-8 so ascii art looks correct etc.
+                    if ("txt" == match.Groups[2].ToString().ToLower())
+                    {
+                        //set text files (GMI source) to be UTF-8 for now
+                        HtmlPanelExtensions.SetCharsetUtf8(BrowserControl.Text);
+                    }
+                }
+
+                BrowserControl.Focus();
+
+                ShowTitle(BrowserControl);
+
+                //we need to turn on/off other elements so focus doesnt move elsewhere
+                //in that case the keyboard events go elsewhere and you have to click 
+                //into the browser to get it to work again
+                //see https://stackoverflow.com/questions/8495857/webbrowser-steals-focus
+                ToggleContainerControlsForBrowser(true);
+            }
+
+            _isNavigating = false;
         }
     }
 }

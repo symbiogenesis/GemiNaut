@@ -21,11 +21,11 @@
 
 using GemiNaut.Properties;
 using GemiNaut.Views;
-using mshtml;
 using System;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
+using TheArtOfDev.HtmlRenderer.WPF;
 using static GemiNaut.Views.MainWindow;
 
 namespace GemiNaut
@@ -33,9 +33,9 @@ namespace GemiNaut
     public class BookmarkManager
     {
         private readonly MainWindow mMainWindow;
-        private readonly WebBrowser mWebBrowser;
+        private readonly HtmlPanel mWebBrowser;
 
-        public BookmarkManager(MainWindow window, WebBrowser browser)
+        public BookmarkManager(MainWindow window, HtmlPanel browser)
         {
             mMainWindow = window;
             mWebBrowser = browser;
@@ -54,8 +54,6 @@ namespace GemiNaut
         {
             var settings = new Settings();
 
-            var doc = (HTMLDocument)mWebBrowser.Document;
-
             foreach (var line in BookmarkLines())
             {
                 var linkParts = ParseGeminiLink(line);
@@ -68,7 +66,7 @@ namespace GemiNaut
             }
 
             //a new one
-            settings.Bookmarks += "\r\n" + "=> " + url + "  " + doc.title;
+            settings.Bookmarks += "\r\n" + "=> " + url + "  " + mWebBrowser.GetTitle();
             settings.Save();
             RefreshBookmarkMenu();
             mMainWindow.ToastNotify("Bookmark added: " + (title + " " + url).Trim(), ToastMessageStyles.Success);
